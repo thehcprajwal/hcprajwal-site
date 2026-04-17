@@ -1,0 +1,73 @@
+services:
+
+  # ── App ───────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hc-system
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+    expose:
+      - "3001"
+    volumes:
+      - dist-files:/app/dist
+      - sqlite-data:/app/data
+    networks:
+      - web
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:3001/api/health | grep -q '\"ok\":true'"]
+      interval: 30s
+      timeout:  10s
+      retries:  3
+      start_period: 15s
+
+  # ── SQLite backup — daily copy to ./backups/ on the host ─────────
+  backup:
+    image: alpine:3.19
+    container_name: hc-backup
+    restart: unless-stopped
+    volumes:
+      - sqlite-data:/data:ro
+      - ./backups:/backups
+    command: >
+      sh -c "while true; do
+        cp /data/hcsystem.db /backups/hcsystem-$$(date +%Y%m%d-%H%M%S).db &&
+        ls -t /backups/*.db | tail -n +8 | xargs -r rm &&
+        sleep 86400;
+      done"
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # ── Caddy ─────────────────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: hc-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - dist-files:/srv/dist:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - web
+    depends_on:
+      app:
+        condition: service_healthy
+
+networks:
+  web:
+    driver: bridge
+
+volumes:
+  sqlite-data:
+  dist-files:
+  caddy-data:
+  caddy-config:
