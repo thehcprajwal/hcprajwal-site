@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hc_system — hcprajwal.in</title>
+    <meta name="description" content="Prajwal HC | Backend & Automation Engineer">
+
+    <!-- Favicon -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+
+    <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body>
+
+    <canvas id="bg-canvas"></canvas>
+
+    <div id="app">
+        <div class="top-bar">
+            <div class="dot dot-r"></div>
+            <div class="dot dot-y"></div>
+            <div class="dot dot-g"></div>
+            <div class="top-title">guest@hc_system — bash</div>
+            <div id="agent-status">agent • standby</div>
+        </div>
+
+        <!-- Terminal output -->
+        <div id="output"></div>
+
+        <!-- ── Analytics dashboard block ──────────────────────────── -->
+        <div id="analytics-block"></div>
+
+        <!-- ── Contact form block ──────────────────────────────────── -->
+        <div id="form-block">
+            <div id="form-progress">
+                <div class="progress-dot active" id="pd0"></div>
+                <div class="progress-dot"        id="pd1"></div>
+                <div class="progress-dot"        id="pd2"></div>
+                <div class="progress-dot"        id="pd3"></div>
+            </div>
+        </div>
+
+        <div style="position:relative">
+            <div id="hint-bar"></div>
+        </div>
+
+        <div id="input-row">
+            <div id="prompt-label">
+                <span class="g b">guest@hc_system</span><span class="m">:</span><span class="path">~</span><span class="m">$</span>
+            </div>
+            <div id="input-wrap">
+                <span id="input-measure"></span>
+                <span id="ghost-text"></span>
+                <input id="cmd-input" type="text" autocomplete="off" spellcheck="false" autofocus />
+            </div>
+            <div id="key-hints">Tab → accept &nbsp;|&nbsp; ↑↓ history &nbsp;|&nbsp; Esc clear</div>
+        </div>
+
+        <div class="scanline"></div>
+    </div>
+
+    <script type="module" src="/js/main.js"></script>
+</body>
+</html>

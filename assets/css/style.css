@@ -1,36 +1,111 @@
+:root {
+    --bg: #0a0d0f;
+    --terminal-bg: #0f1416;
+    --border: #223038;
+    --accent: #39ff14;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
 body {
-  margin: 0;
-  background: #0d1117;
-  color: #00ff9c;
-  font-family: "Courier New", monospace;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
+    background: var(--bg);
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'JetBrains Mono', monospace;
 }
 
-.terminal {
-  max-width: 700px;
-  width: 90%;
+/* ── Background Canvas ── */
+#bg-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+    pointer-events: none;
 }
 
-.line {
-  margin: 6px 0;
+/* ── Terminal Window ── */
+#app {
+    position: relative;
+    z-index: 2;
+    width: min(1020px, 94vw);
+    height: 82vh;
+    background: var(--terminal-bg);
+    border: 2px solid var(--border);
+    border-radius: 16px;
+    box-shadow:
+        0 0 0 1px rgba(57, 255, 20, 0.15),
+        0 30px 90px rgba(0, 0, 0, 0.75);
+    overflow: hidden;
+    margin: 40px auto;
+    transition: box-shadow 0.3s ease;
 }
 
-.prompt::before {
-  content: "hcprajwal@system:~$ ";
-  color: #58a6ff;
+#app.glow {
+    animation: boot-glow 0.6s ease-out;
 }
 
-.blink {
-  animation: blink 1s infinite;
+@keyframes boot-glow {
+    0%   { box-shadow: 0 0 0 1px rgba(57,255,20,0.15), 0 30px 90px rgba(0,0,0,0.75); }
+    40%  { box-shadow: 0 0 24px 6px rgba(57,255,20,0.45), 0 30px 90px rgba(0,0,0,0.75); }
+    100% { box-shadow: 0 0 0 1px rgba(57,255,20,0.15), 0 30px 90px rgba(0,0,0,0.75); }
 }
 
-@keyframes blink {
-  50% { opacity: 0; }
+/* ── Top Bar ── */
+.top-bar {
+    height: 38px;
+    background: #161b1f;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    font-size: 13px;
+    color: #5e6b73;
 }
 
-.dim {
-  color: #8b949e;
+.title {
+    color: var(--accent);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.status {
+    margin-left: auto;
+    display: flex;
+    gap: 20px;
+    font-size: 12px;
+}
+
+.dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--accent);
+}
+
+/* ── xterm Container ── */
+#terminal {
+    height: calc(100% - 38px);
+    padding: 20px;
+}
+
+/* ── CRT Scanline Overlay ── */
+.scanline {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to bottom,
+        transparent 50%,
+        rgba(57, 255, 20, 0.03) 50%
+    );
+    background-size: 100% 4px;
+    pointer-events: none;
+    animation: scan 8s linear infinite;
+    opacity: 0.3;
+    z-index: 3;
+}
+
+@keyframes scan {
+    0%   { transform: translateY(-100%); }
+    100% { transform: translateY(400%); }
 }

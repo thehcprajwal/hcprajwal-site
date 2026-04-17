@@ -1,0 +1,38 @@
+{
+    email prajwal@hcprajwal.in
+    admin off
+}
+
+hcprajwal.in {
+
+    # ── API → Express container ────────────────────────────────────
+    handle /api/* {
+        reverse_proxy app:3001
+    }
+
+    # ── Everything else → built frontend ──────────────────────────
+    handle {
+        root * /srv/dist
+        file_server
+
+        # SPA fallback — serve index.html for unknown routes
+        try_files {path} /index.html
+    }
+
+    # ── Security headers ──────────────────────────────────────────
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options    "nosniff"
+        X-Frame-Options           "DENY"
+        Referrer-Policy           "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # ── Compression ───────────────────────────────────────────────
+    encode gzip
+}
+
+# Redirect www → non-www
+www.hcprajwal.in {
+    redir https://hcprajwal.in{uri} permanent
+}
