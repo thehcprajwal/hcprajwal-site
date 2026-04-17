@@ -7,6 +7,16 @@
 ehthumbs.db
 Thumbs.db
 
-# Any IDE specific files
+# IDE
 .vscode/
 .idea/
+
+# Project
+node_modules/
+dist/
+.env
+*.log
+
+# Runtime data — never commit
+data/
+backups/
