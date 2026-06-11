@@ -1,6 +1,6 @@
 # hc_system — hcprajwal.in
 
-Terminal-based personal portfolio. Simulates a shell with an AI agent, contact form, analytics dashboard, and resume downloads.
+Terminal-based personal portfolio. Simulates a shell with an AI agent and contact form.
 
 ## Stack
 
@@ -8,58 +8,50 @@ Terminal-based personal portfolio. Simulates a shell with an AI agent, contact f
 |---|---|
 | Frontend | Vanilla JS, Three.js, Vite |
 | Backend | Node.js, Hono |
-| Database | SQLite (better-sqlite3) |
-| AI | Groq (llama-3.3-70b) |
-| Infra | Docker, Caddy, AWS Lightsail |
-| Automation | n8n (contact delivery) |
+| AI | OpenRouter (llama-3.1-8b, free tier) |
+| Email | Resend |
+| Infra | Docker, Caddy |
 
 ## Local dev
 
 ```bash
-cp .env.example .env   # fill in GROQ_API_KEY and other vars
+cp .env.example .env   # fill in values
 npm install
-npm run dev            # starts Vite + Express concurrently
+npm run dev            # starts Vite + Hono concurrently
 ```
 
-Visit `http://localhost:5173` (frontend) — API runs on `:3001`.
+Frontend: `http://localhost:5173` — API: `http://localhost:3001`
 
 ## Environment variables
 
-See `.env.example` for the full list. Required at minimum:
-
-- `GROQ_API_KEY` — from console.groq.com
-- `ANALYTICS_PASSWORD` — password for `analytics --pass <pwd>` command
-- `N8N_WEBHOOK_URL` — n8n webhook that handles contact form delivery
-
-In production, AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`) are stored in the server `.env` and used to fetch remaining secrets from AWS Parameter Store at startup.
+| Variable | Required | Notes |
+|---|---|---|
+| `OPENROUTER_API_KEY` | yes | from openrouter.ai |
+| `RESEND_API_KEY` | yes | from resend.com — verify your domain first |
+| `DOMAIN` | prod only | e.g. `hcprajwal.in`, sets CORS origin |
+| `OPENROUTER_MODEL` | no | defaults to `meta-llama/llama-3.1-8b-instruct:free` |
 
 ## Deploy
 
+Works with any SSH-accessible Linux host (Lightsail, Raspberry Pi, VPS):
+
 ```bash
-# Edit SERVER in deploy.sh with your Lightsail IP, then:
+export SERVER="ubuntu@your-server-ip"   # or pi@raspberrypi.local
 ./deploy.sh
 ```
-
-The script validates the placeholder is replaced and `.env` exists before running. It rsyncs everything except `node_modules`, `dist`, `data`, and `.env`, then copies `.env` separately and rebuilds Docker containers on the server.
 
 ## Architecture
 
 ```
 Browser
-  └── Caddy (TLS, reverse proxy)
-        ├── /          → static dist/ (Vite build)
-        └── /api/*     → Hono server (:3001)
-                            ├── /api/agent     → Groq streaming SSE
-                            ├── /api/contact   → n8n webhook
-                            ├── /api/track     → SQLite analytics
-                            ├── /api/analytics → analytics dashboard
-                            ├── /api/resume/*  → GitHub releases proxy
-                            └── /api/health    → health check
+  └── Caddy (TLS + static files)
+        └── /api/*  →  Hono server (:3001, internal only)
+                          ├── /api/agent    → OpenRouter SSE stream
+                          ├── /api/contact  → Resend email
+                          └── /api/health   → health check
 ```
 
-## Database
-
-SQLite at `data/hcsystem.db`. Single table: `analytics_events` (pageviews, commands, agent queries, contact submissions). Backed up daily to `./backups/` — keeps last 7 copies.
+Two containers: `app` (Hono) and `caddy`. No database, no volumes other than Caddy TLS certs.
 
 ## Terminal commands
 
@@ -71,8 +63,6 @@ SQLite at `data/hcsystem.db`. Single table: `analytics_events` (pageviews, comma
 | `projects` | Portfolio projects |
 | `contact` | Interactive contact form |
 | `agent <question>` | Ask the AI agent |
-| `resume --list` | List resume variants |
-| `resume --download` | Download latest resume |
-| `analytics --pass <pwd>` | View site analytics |
+| `resume` | View resume (opens GitHub releases) |
 | `reset` | Clear agent memory |
 | `clear` | Clear terminal |

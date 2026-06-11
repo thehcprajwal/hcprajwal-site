@@ -6,12 +6,6 @@ import { streamAgent, resetMemory } from './agent.js';
 import { initAutocomplete }         from './autocomplete.js';
 import { setIdle, triggerPulse }    from './three-bg.js';
 import { createContactForm }        from './contact.js';
-import {
-    initAnalytics,
-    openAnalytics,
-    closeAnalytics,
-    isAnalyticsActive
-} from './analytics.js';
 import { A } from './ansi.js';
 
 const COMMANDS = [
@@ -21,8 +15,7 @@ const COMMANDS = [
     { cmd: 'projects',  desc: 'Portfolio projects'                       },
     { cmd: 'contact',   desc: 'Send a message'                           },
     { cmd: 'agent',     desc: 'Ask the AI agent'                         },
-    { cmd: 'analytics', desc: 'View site analytics (password protected)' },
-    { cmd: 'resume',    desc: 'Download my resume PDF'                   },
+    { cmd: 'resume',    desc: 'View my resume'                            },
     { cmd: 'reset',     desc: 'Reset agent memory'                       },
     { cmd: 'clear',     desc: 'Clear terminal'                           }
 ];
@@ -64,15 +57,6 @@ function levenshtein(a, b) {
     return dp[m][n];
 }
 
-// ── Passive tracker — fire and forget ─────────────────────────────
-function track(event, payload = {}) {
-    fetch('/api/track', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ event, ...payload })
-    }).catch(() => {});
-}
-
 export function initTerminal() {
     // ── DOM refs ───────────────────────────────────────────────────
     const output         = document.getElementById('output');
@@ -81,7 +65,6 @@ export function initTerminal() {
     const hintBar        = document.getElementById('hint-bar');
     const statusEl       = document.getElementById('agent-status');
     const app            = document.getElementById('app');
-    const analyticsBlock = document.getElementById('analytics-block');
 
     let cmdHistory = [];
     let histIdx    = -1;
@@ -130,9 +113,6 @@ export function initTerminal() {
         commands: COMMANDS
     });
 
-    // ── Analytics ──────────────────────────────────────────────────
-    initAnalytics({ refs: { analyticsBlock }, print });
-
     // ── Contact form ───────────────────────────────────────────────
     const contactForm = createContactForm({
         print,
@@ -162,7 +142,7 @@ export function initTerminal() {
         thinkEl.className = 'line';
         thinkEl.innerHTML = `
             <span class="agent-label">◈ hc_agent
-                <span class="model-tag">[llama-3.3-70b]</span>
+                <span class="model-tag">[llama-3.1-8b]</span>
             </span>
             <span class="thinking-dots">
                 <span></span><span></span><span></span>
@@ -235,9 +215,6 @@ export function initTerminal() {
         printPrompt(trimmed);
         pulse();
 
-        // Track every command
-        track('command', { cmd: base });
-
         if (base === 'clear') { output.innerHTML = ''; return; }
 
         if (base === 'reset') {
@@ -255,102 +232,18 @@ export function initTerminal() {
         }
 
         if (base === 'resume') {
-            const hasList     = trimmed.includes('--list');
-            const hasDownload = trimmed.includes('--download');
-            const variantMatch = trimmed.match(/--variant\s+(\S+)/);
-            const variant     = variantMatch ? variantMatch[1].toLowerCase() : null;
-
-            if (hasList) {
-                print('');
-                print('\x1b[90m  Fetching resume variants...\x1b[0m');
-                fetch('/api/resume/assets')
-                    .then(r => r.json())
-                    .then(data => {
-                        if (!data.ok) { print(`\x1b[31m  ✗ ${data.error}\x1b[0m`); print(''); return; }
-                        print(`  Release \x1b[32m${data.tag}\x1b[0m — ${data.assets.length} variant(s):`);
-                        print('');
-                        data.assets.forEach(a => {
-                            const kb = (a.size / 1024).toFixed(0);
-                            const name = a.name.replace(/\.pdf$/i, '');
-                            print(`  \x1b[32m▸\x1b[0m ${name.padEnd(32)} \x1b[90m${kb} KB\x1b[0m`);
-                        });
-                        print('');
-                        print('  \x1b[90mUsage: resume --download --variant <name>\x1b[0m');
-                        print('');
-                    })
-                    .catch(() => { print('\x1b[31m  ✗ Network error.\x1b[0m'); print(''); });
-                return;
-            }
-
-            if (hasDownload) {
-                print('');
-                print('\x1b[90m  Fetching release assets...\x1b[0m');
-                fetch('/api/resume/assets')
-                    .then(r => r.json())
-                    .then(data => {
-                        if (!data.ok) { print(`\x1b[31m  ✗ ${data.error}\x1b[0m`); print(''); return; }
-                        if (!data.assets.length) {
-                            print('\x1b[31m  ✗ No PDF assets found in latest release.\x1b[0m');
-                            print('');
-                            return;
-                        }
-
-                        let asset;
-                        if (variant) {
-                            asset = data.assets.find(a =>
-                                a.name.toLowerCase().includes(variant)
-                            );
-                            if (!asset) {
-                                print(`\x1b[31m  ✗ Variant "${variant}" not found.\x1b[0m`);
-                                print('  Run \x1b[32mresume --list\x1b[0m to see available variants.');
-                                print('');
-                                return;
-                            }
-                        } else {
-                            asset = data.assets[0];
-                        }
-
-                        // Trigger download via hidden <a> — server proxies the PDF
-                        const a = document.createElement('a');
-                        a.href     = `/api/resume/download/${asset.id}`;
-                        a.download = asset.name;
-                        a.style.display = 'none';
-                        document.body.appendChild(a);
-                        a.click();
-                        a.remove();
-
-                        print(`  \x1b[32m✓\x1b[0m Downloading \x1b[32m${asset.name}\x1b[0m...`);
-                        print('');
-                        pulse();
-                    })
-                    .catch(() => { print('\x1b[31m  ✗ Network error.\x1b[0m'); print(''); });
-                return;
-            }
-
-            // Usage
+            const a = document.createElement('a');
+            a.href = 'https://github.com/prajwalhc/resume/releases/latest';
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
             print('');
-            print('  \x1b[1;36mresume\x1b[0m — Download my resume PDF');
+            print('  \x1b[32m✓\x1b[0m Opening resume in a new tab...');
             print('');
-            print('  \x1b[32mresume --download\x1b[0m                    latest variant');
-            print('  \x1b[32mresume --download --variant <name>\x1b[0m   specific variant');
-            print('  \x1b[32mresume --list\x1b[0m                        list all variants');
-            print('');
-            return;
-        }
-
-        if (base === 'analytics') {
-            const parts    = trimmed.split(/\s+/);
-            const passFlag = parts.indexOf('--pass');
-            const password = passFlag !== -1 ? parts[passFlag + 1] : '';
-
-            if (!password) {
-                print('');
-                print('  Usage: \x1b[32manalytics --pass <password>\x1b[0m');
-                print('');
-                return;
-            }
-
-            openAnalytics(password);
+            pulse();
             return;
         }
 
@@ -370,7 +263,6 @@ export function initTerminal() {
             }
             print('');
             runAgent(query);
-            track('agent_query', { query: query.slice(0, 200) });
             return;
         }
 
@@ -383,8 +275,7 @@ export function initTerminal() {
             print('│\x1b[0m  projects    My work                                 \x1b[1;32m│');
             print('│\x1b[0m  contact     Send a message                          \x1b[1;32m│');
             print('│\x1b[0m  agent       Ask the AI agent                        \x1b[1;32m│');
-            print('│\x1b[0m  resume      Download my resume PDF                  \x1b[1;32m│');
-            print('│\x1b[0m  analytics   View site analytics                     \x1b[1;32m│');
+            print('│\x1b[0m  resume      View my resume                          \x1b[1;32m│');
             print('│\x1b[0m  reset       Clear agent memory                      \x1b[1;32m│');
             print('│\x1b[0m  clear       Clear terminal                          \x1b[1;32m│');
             print('└──────────────────────────────────────────────────────\x1b[0m');
@@ -471,9 +362,6 @@ export function initTerminal() {
     cmdInput.addEventListener('keydown', e => {
         resetIdleTimer();
 
-        // Analytics dashboard takes full focus
-        if (isAnalyticsActive()) return;
-
         // ── Contact form active ───────────────────────────────────
         if (contactForm.isActive()) {
             const result = contactForm.handleKey(e.key, cmdInput.value);
@@ -545,7 +433,7 @@ export function initTerminal() {
     });
 
     app.addEventListener('click', () => {
-        if (!formMode && !isAnalyticsActive()) cmdInput.focus();
+        if (!formMode) cmdInput.focus();
     });
 
     // ── Boot sequence ──────────────────────────────────────────────
@@ -559,7 +447,6 @@ export function initTerminal() {
             print('  Welcome to \x1b[1;32mhc_system\x1b[0m. Type \x1b[1;32mhelp\x1b[0m to begin.');
             print('  Try \x1b[32mcontact\x1b[0m to send a message or \x1b[32magent tell me about yourself\x1b[0m.');
             print('');
-            track('pageview');
             cmdInput.focus();
             resetIdleTimer();
         }

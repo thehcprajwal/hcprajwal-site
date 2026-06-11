@@ -54,7 +54,5 @@ export function initAutocomplete({ input, ghost, hintBar, commands }) {
         hintBar.classList.add('visible');
     }
 
-    input.addEventListener('input', updateGhost);
-
     return { accept, updateGhost };
 }

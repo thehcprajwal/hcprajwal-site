@@ -1,21 +1,24 @@
 #!/bin/bash
 set -e
 
-SERVER="ubuntu@your-lightsail-ip"
-APP_DIR="/home/ubuntu/hc-system"
+# Set SERVER before running: export SERVER="user@your-server-ip"
+# Works with Lightsail, a Raspberry Pi, or any SSH-accessible host.
+SERVER="${SERVER:-user@your-server-ip}"
+APP_DIR="${APP_DIR:-/home/ubuntu/hc-system}"
 
-# ── Guard: catch un-edited placeholder ───────────────────────────────
-if [[ "$SERVER" == *"your-lightsail-ip"* ]]; then
-    echo "✗ Update SERVER with your actual Lightsail IP before deploying."
+if [[ "$SERVER" == *"your-server-ip"* ]]; then
+    echo "✗ Set the SERVER env var before deploying:"
+    echo "    export SERVER='ubuntu@<ip>'  # Lightsail"
+    echo "    export SERVER='pi@<ip>'      # Raspberry Pi"
     exit 1
 fi
 
 if [[ ! -f .env ]]; then
-    echo "✗ .env file not found. Create it with AWS credentials before deploying."
+    echo "✗ .env file not found. Copy .env.example and fill in the values."
     exit 1
 fi
 
-echo "▸ Syncing files to server..."
+echo "▸ Syncing files to $SERVER..."
 rsync -avz --exclude='node_modules' \
            --exclude='.git' \
            --exclude='dist' \
@@ -35,4 +38,4 @@ ssh "$SERVER" "
 "
 
 echo ""
-echo "✓ Deployed. Check https://hcprajwal.in"
+echo "✓ Deployed to $SERVER"

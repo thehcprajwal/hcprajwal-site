@@ -1,50 +1,52 @@
-import { Hono }        from 'hono';
-import { cors }        from 'hono/cors';
-import { logger }      from 'hono/logger';
-import { streamSSE }   from 'hono/streaming';
-import { serve }       from '@hono/node-server';
-import { serveStatic } from '@hono/node-server/serve-static';
-import Groq            from 'groq-sdk';
+import { Hono }      from 'hono';
+import { cors }      from 'hono/cors';
+import { logger }    from 'hono/logger';
+import { streamSSE } from 'hono/streaming';
+import { serve }     from '@hono/node-server';
+import OpenAI        from 'openai';
+import { Resend }    from 'resend';
 import 'dotenv/config';
 
-import { db, migrate }   from './db.js';
 import { isRateLimited } from './utils/rateLimit.js';
-import trackRouter,
-       { getClientIP }   from './routes/track.js';
-import analyticsRouter   from './routes/analytics.js';
-import resumeRouter      from './routes/resume.js';
 
 const PORT   = parseInt(process.env.PORT)   || 3001;
-const MODEL  = process.env.GROQ_MODEL       || 'llama-3.3-70b-versatile';
+const MODEL  = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
 const ORIGIN = process.env.DOMAIN           ? `https://${process.env.DOMAIN}` : '*';
 const isProd = process.env.NODE_ENV         === 'production';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const app  = new Hono();
+const openai = new OpenAI({
+    apiKey:         process.env.OPENROUTER_API_KEY,
+    baseURL:        'https://openrouter.ai/api/v1',
+    defaultHeaders: {
+        'HTTP-Referer': process.env.DOMAIN ? `https://${process.env.DOMAIN}` : 'http://localhost:3001',
+        'X-Title':      'hc_system',
+    }
+});
+
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+const app = new Hono();
+
+function getClientIP(c) {
+    if (isProd) {
+        const fwd = c.req.header('x-forwarded-for');
+        if (fwd) return fwd.split(',')[0].trim();
+    }
+    return '127.0.0.1';
+}
 
 // ── Middleware ────────────────────────────────────────────────────
 app.use(logger());
 app.use(cors({ origin: isProd ? ORIGIN : '*', allowMethods: ['GET', 'POST'] }));
 
-// ── API routes ────────────────────────────────────────────────────
-app.route('/api/track',     trackRouter);
-app.route('/api/analytics', analyticsRouter);
-app.route('/api/resume',    resumeRouter);
-
 // ── GET /api/health ───────────────────────────────────────────────
 app.get('/api/health', (c) => {
-    try {
-        db.prepare('SELECT 1').get();
-        return c.json({
-            ok:      true,
-            model:   MODEL,
-            db:      'connected',
-            webhook: process.env.N8N_WEBHOOK_URL ? 'configured' : 'missing',
-            time:    new Date().toISOString()
-        });
-    } catch {
-        return c.json({ ok: false, db: 'disconnected' }, 503);
-    }
+    return c.json({
+        ok:     true,
+        model:  MODEL,
+        resend: resend ? 'configured' : 'missing',
+        time:   new Date().toISOString()
+    });
 });
 
 // ── Validation helpers ────────────────────────────────────────────
@@ -71,44 +73,30 @@ app.post('/api/contact', async (c) => {
 
     if (errors.length) return c.json({ ok: false, error: errors.join(' ') }, 400);
 
-    const webhookUrl = process.env.N8N_WEBHOOK_URL;
-    if (!webhookUrl) {
-        console.error('[contact] N8N_WEBHOOK_URL not configured');
+    if (!resend) {
+        console.error('[contact] RESEND_API_KEY not configured');
         return c.json({ ok: false, error: 'Contact system is not configured yet.' }, 500);
     }
 
-    const payload = {
-        reason:    sanitize(reason),
-        name:      sanitize(name),
-        email:     sanitize(email),
-        message:   sanitize(message),
-        source:    'hc_system_terminal',
-        timestamp: new Date().toISOString(),
-        ip:        ip || 'unknown'
-    };
-
     try {
-        const webhookRes = await fetch(webhookUrl, {
-            method:  'POST',
-            headers: {
-                'Content-Type':     'application/json',
-                'X-Webhook-Secret': process.env.N8N_WEBHOOK_SECRET || ''
-            },
-            body:   JSON.stringify(payload),
-            signal: AbortSignal.timeout(10000)
+        const { error } = await resend.emails.send({
+            from:     `hc_system <noreply@${process.env.DOMAIN || 'hcprajwal.in'}>`,
+            to:       'prajwal@hcprajwal.in',
+            reply_to: sanitize(email),
+            subject:  `[contact] ${sanitize(reason)} — ${sanitize(name)}`,
+            text:     `Name: ${sanitize(name)}\nEmail: ${sanitize(email)}\nReason: ${sanitize(reason)}\n\nMessage:\n${sanitize(message)}`,
         });
 
-        if (!webhookRes.ok) {
-            const body = await webhookRes.text().catch(() => 'unknown error');
-            console.error(`[contact] n8n returned ${webhookRes.status}: ${body}`);
+        if (error) {
+            console.error('[contact] Resend error:', error);
             return c.json({ ok: false, error: 'Message delivery failed. Please email me directly.' }, 502);
         }
 
-        console.log(`[contact] delivered: ${name} <${email}> — ${reason}`);
+        console.log(`[contact] sent: ${name} <${email}> — ${reason}`);
         return c.json({ ok: true, message: "Message received. I'll get back to you soon." });
 
     } catch (err) {
-        console.error('[contact] webhook error:', err.message);
+        console.error('[contact] error:', err.message);
         return c.json({ ok: false, error: 'Could not deliver message. Please email prajwal@hcprajwal.in directly.' }, 502);
     }
 });
@@ -135,13 +123,13 @@ SKILLS:
 - Languages: TypeScript (90%), JavaScript (82%), Python (78%), Bash (65%)
 - Backend: Node.js, Hono, FastAPI, WebSockets, REST APIs
 - Automation: n8n, Zapier, Webhook pipelines, Cron scheduling
-- Infrastructure: Docker, AWS Lightsail, Caddy, Nginx, Linux
+- Infrastructure: Docker, Caddy, Nginx, Linux
 - Databases: SQLite, PostgreSQL, MongoDB, Redis
-- AI/ML: LangChain, Groq, OpenAI API, RAG pipelines, n8n AI nodes
+- AI/ML: LangChain, OpenRouter, OpenAI API, RAG pipelines, n8n AI nodes
 
 PROJECTS:
 1. hc_system — Terminal portfolio with AI agent, fish-style autocomplete,
-   n8n automation. Stack: Node.js, Hono, Three.js, SQLite, Docker, Caddy.
+   contact form. Stack: Node.js, Hono, Three.js, Docker, Caddy.
 
 2. AutoFlow Engine — Webhook-driven pipeline orchestrator integrating
    10+ third-party APIs with retry logic and dead-letter queues.
@@ -149,7 +137,7 @@ PROJECTS:
 
 3. RAG Document Assistant — Retrieval-augmented generation for querying
    internal knowledge bases with citations and confidence scores.
-   Stack: Python, FastAPI, LangChain, Groq, Pinecone.`;
+   Stack: Python, FastAPI, LangChain, OpenRouter, Pinecone.`;
 
 app.post('/api/agent', async (c) => {
     const ip = getClientIP(c);
@@ -167,16 +155,15 @@ app.post('/api/agent', async (c) => {
 
     return streamSSE(c, async (stream) => {
         try {
-            const groqStream = await groq.chat.completions.create({
+            const aiStream = await openai.chat.completions.create({
                 model:       MODEL,
                 messages:    [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
                 stream:      true,
                 max_tokens:  400,
                 temperature: 0.65,
-                signal:      abort.signal
-            });
+            }, { signal: abort.signal });
 
-            for await (const chunk of groqStream) {
+            for await (const chunk of aiStream) {
                 const token = chunk.choices[0]?.delta?.content;
                 if (token) await stream.writeSSE({ data: JSON.stringify({ token }) });
             }
@@ -192,18 +179,10 @@ app.post('/api/agent', async (c) => {
     });
 });
 
-// ── Static frontend (fallback when Caddy not present) ─────────────
-if (isProd) {
-    app.use(serveStatic({ root: './dist' }));
-    app.get('*', serveStatic({ path: './dist/index.html' }));
-}
-
 // ── Start ─────────────────────────────────────────────────────────
-migrate();
-
 serve({ fetch: app.fetch, port: PORT }, () => {
     console.log(`[hc_system] running  → http://localhost:${PORT}`);
     console.log(`[hc_system] model    → ${MODEL}`);
     console.log(`[hc_system] env      → ${process.env.NODE_ENV || 'development'}`);
-    console.log(`[hc_system] n8n      → ${process.env.N8N_WEBHOOK_URL || 'not set'}`);
+    console.log(`[hc_system] resend   → ${resend ? 'configured' : 'not set'}`);
 });

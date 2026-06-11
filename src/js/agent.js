@@ -65,6 +65,15 @@ export async function streamAgent(query, { onChunk, onDone, onError }) {
             }
         }
 
+        // Stream ended without [DONE] — still resolve so input doesn't lock
+        if (fullText) {
+            addToMemory('user', query);
+            addToMemory('assistant', fullText);
+            onDone(fullText);
+        } else {
+            onError('Stream ended unexpectedly.');
+        }
+
     } catch (err) {
         onError(err.message || 'Network error — is the server running?');
     }

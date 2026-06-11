@@ -179,11 +179,13 @@ export function createContactForm({ print, pulse, onDone }) {
             return { consumed: true };
         }
 
-        if (step >= 1 && step <= 3 && key === 'Enter') {
-            if (validateAndSet(inputValue)) {
-                print(`\x1b[32m  ✓\x1b[0m ${inputValue.trim()}`);
-                const mode = advance();
-                return { consumed: true, mode, clearInput: true };
+        if (step >= 1 && step <= 3) {
+            if (key === 'Enter') {
+                if (validateAndSet(inputValue)) {
+                    print(`\x1b[32m  ✓\x1b[0m ${inputValue.trim()}`);
+                    const mode = advance();
+                    return { consumed: true, mode, clearInput: true };
+                }
             }
             return { consumed: true };
         }
@@ -193,7 +195,7 @@ export function createContactForm({ print, pulse, onDone }) {
             return { consumed: true, mode: 'submitting' };
         }
 
-        return { consumed: false };
+        return { consumed: true };
     }
 
     return { start, handleKey, isActive: () => active };
