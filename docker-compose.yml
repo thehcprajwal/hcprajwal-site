@@ -13,8 +13,6 @@ services:
       PORT: 3001
     expose:
       - "3001"
-    volumes:
-      - dist-files:/app/dist
     networks:
       - web
     healthcheck:
@@ -34,7 +32,7 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - dist-files:/srv/dist:ro
+      - ./dist:/srv/dist:ro
       - caddy-data:/data
       - caddy-config:/config
     networks:
@@ -48,6 +46,5 @@ networks:
     driver: bridge
 
 volumes:
-  dist-files:
   caddy-data:
   caddy-config:

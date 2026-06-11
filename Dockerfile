@@ -1,26 +1,12 @@
-# ── Stage 1: Build ─────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:20-alpine
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --omit=dev
 
-COPY . .
-RUN npm run build
-RUN npm prune --production
-
-
-# ── Stage 2: Production runtime ────────────────────────────────────
-FROM node:20-alpine AS runner
-
-WORKDIR /app
-
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist         ./dist
-
-COPY package*.json ./
-COPY server/       ./server/
+COPY dist/    ./dist/
+COPY server/  ./server/
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser

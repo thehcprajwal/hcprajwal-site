@@ -5,7 +5,7 @@
 
 hcprajwal.in {
 
-    # ── API → Express container ────────────────────────────────────
+    # ── API → Hono container ──────────────────────────────────────
     handle /api/* {
         reverse_proxy app:3001
     }
