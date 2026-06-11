@@ -81,7 +81,7 @@ app.post('/api/contact', async (c) => {
     try {
         const { error } = await resend.emails.send({
             from:     `hc_system <noreply@${process.env.DOMAIN || 'hcprajwal.in'}>`,
-            to:       process.env.CONTACT_TO_EMAIL || 'prajwal@hcprajwal.in',
+            to:       process.env.CONTACT_TO_EMAIL || 'hello@hcprajwal.in',
             reply_to: sanitize(email),
             subject:  `[contact] ${sanitize(reason)} — ${sanitize(name)}`,
             text:     `Name: ${sanitize(name)}\nEmail: ${sanitize(email)}\nReason: ${sanitize(reason)}\n\nMessage:\n${sanitize(message)}`,
@@ -99,14 +99,14 @@ app.post('/api/contact', async (c) => {
             from:    `Prajwal HC <noreply@${process.env.DOMAIN || 'hcprajwal.in'}>`,
             to:      sanitize(email),
             subject: `Got your message — Prajwal HC`,
-            text:    `Hey ${sanitize(name)},\n\nThanks for reaching out — I've received your message and will get back to you soon.\n\n— Prajwal\nprajwal@hcprajwal.in`,
+            text:    `Hey ${sanitize(name)},\n\nThanks for reaching out — I've received your message and will get back to you soon.\n\n— Prajwal\nhello@hcprajwal.in`,
         }).catch(err => console.error('[contact] confirmation error:', err.message));
 
         return c.json({ ok: true, message: "Message received. I'll get back to you soon." });
 
     } catch (err) {
         console.error('[contact] error:', err.message);
-        return c.json({ ok: false, error: 'Could not deliver message. Please email prajwal@hcprajwal.in directly.' }, 502);
+        return c.json({ ok: false, error: 'Could not deliver message. Please email hello@hcprajwal.in directly.' }, 502);
     }
 });
 
@@ -125,7 +125,7 @@ ABOUT PRAJWAL HC:
 - Role: Backend & Automation Engineer
 - Location: Bangalore, India
 - GitHub: github.com/prajwalhc
-- Email: prajwal@hcprajwal.in
+- Email: hello@hcprajwal.in
 - Open to: Backend engineering roles, freelance automation projects
 
 SKILLS:
