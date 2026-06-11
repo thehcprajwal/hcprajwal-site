@@ -81,7 +81,7 @@ app.post('/api/contact', async (c) => {
     try {
         const { error } = await resend.emails.send({
             from:     `hc_system <noreply@${process.env.DOMAIN || 'hcprajwal.in'}>`,
-            to:       'prajwal@hcprajwal.in',
+            to:       process.env.CONTACT_TO_EMAIL || 'prajwal@hcprajwal.in',
             reply_to: sanitize(email),
             subject:  `[contact] ${sanitize(reason)} — ${sanitize(name)}`,
             text:     `Name: ${sanitize(name)}\nEmail: ${sanitize(email)}\nReason: ${sanitize(reason)}\n\nMessage:\n${sanitize(message)}`,
