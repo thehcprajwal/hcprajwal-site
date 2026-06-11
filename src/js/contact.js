@@ -186,8 +186,13 @@ export function createContactForm({ print, pulse, onDone }) {
                     const mode = advance();
                     return { consumed: true, mode, clearInput: true };
                 }
+                return { consumed: true };
             }
-            return { consumed: true };
+            // Block navigation keys that would escape to the shell handler
+            if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'Tab') {
+                return { consumed: true };
+            }
+            return { consumed: false };
         }
 
         if (step === 4 && key === 'Enter') {
