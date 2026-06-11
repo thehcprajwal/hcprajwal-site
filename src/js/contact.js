@@ -9,20 +9,24 @@ const REASONS = [
 
 export function createContactForm({ print, pulse, onDone }) {
     const data = { reason: '', name: '', email: '', message: '' };
-    let step       = 0;
-    let reasonIdx  = 0;
-    let active     = false;
-    let submitting = false;
+    let step          = 0;
+    let reasonIdx     = 0;
+    let active        = false;
+    let submitting    = false;
+    let reasonEls     = [];
 
     // ── Step 0: reason selector ───────────────────────────────────
     function renderReason() {
-        print(`${A.CYAN}  What brings you here?${A.RESET}`);
+        reasonEls.forEach(el => el.remove());
+        reasonEls = [];
+        const p = (text) => { const el = print(text); reasonEls.push(el); };
+        p(`${A.CYAN}  What brings you here?${A.RESET}`);
         REASONS.forEach((r, i) => {
             const marker = i === reasonIdx ? `${A.GREEN_B}❯${A.RESET}` : `${A.DIM}○${A.RESET}`;
             const color  = i === reasonIdx ? A.GREEN_B : A.DIM;
-            print(`    ${marker} ${color}${r.label}${A.RESET}`);
+            p(`    ${marker} ${color}${r.label}${A.RESET}`);
         });
-        print(`${A.DIM}  ↑↓ select · Enter confirm${A.RESET}`);
+        p(`${A.DIM}  ↑↓ select · Enter confirm${A.RESET}`);
     }
 
     // ── Steps 1–3: text prompts ───────────────────────────────────
@@ -141,6 +145,7 @@ export function createContactForm({ print, pulse, onDone }) {
         active    = true;
         step      = 0;
         reasonIdx = 0;
+        reasonEls = [];
         data.reason = data.name = data.email = data.message = '';
 
         print('');
