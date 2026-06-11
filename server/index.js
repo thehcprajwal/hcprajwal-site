@@ -93,6 +93,15 @@ app.post('/api/contact', async (c) => {
         }
 
         console.log(`[contact] sent: ${name} <${email}> — ${reason}`);
+
+        // Confirmation to sender — fire and forget
+        resend.emails.send({
+            from:    `Prajwal HC <noreply@${process.env.DOMAIN || 'hcprajwal.in'}>`,
+            to:      sanitize(email),
+            subject: `Got your message — Prajwal HC`,
+            text:    `Hey ${sanitize(name)},\n\nThanks for reaching out — I've received your message and will get back to you soon.\n\n— Prajwal\nprajwal@hcprajwal.in`,
+        }).catch(err => console.error('[contact] confirmation error:', err.message));
+
         return c.json({ ok: true, message: "Message received. I'll get back to you soon." });
 
     } catch (err) {
