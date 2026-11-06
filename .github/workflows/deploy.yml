@@ -1,0 +1,56 @@
+# Deploys the site to AWS when the site changes on main (or when run by hand from the Actions tab).
+# AWS access uses a short-lived OIDC token. There are no AWS keys stored in GitHub.
+# The role is created by infra/github-deploy.yaml (see README.md, "Deploy from GitHub").
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+permissions:
+  id-token: write      # lets the job request the OIDC token
+  contents: read
+
+concurrency:
+  group: deploy        # never run two deploys at once
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ACCOUNT_ID: "278371786585"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/hc-site-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Find the certificate for hcprajwal.in
+        id: cert
+        run: |
+          ARN=$(aws acm list-certificates --region us-east-1 \
+            --query "CertificateSummaryList[?DomainName=='hcprajwal.in'&&Status=='ISSUED']|[0].CertificateArn" --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Build and deploy
+        env:
+          CFN_ROLE_ARN: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/hc-site-cloudformation
+        run: scripts/deploy.sh app "${{ steps.cert.outputs.arn }}"
+
+      - name: Check the live site
+        run: |
+          sleep 20
+          curl -fsS https://hcprajwal.in/api/health

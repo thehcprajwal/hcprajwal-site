@@ -1,0 +1,218 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  hc-site v2 app - Lambda Web Function behind CloudFront (origin access control, IamAuth endpoint).
+  Deploy in us-east-1 (CloudFront certificates must live there). Works without a domain first (CloudFront
+  default URL); pass CertificateArn (ACM, us-east-1) to serve hcprajwal.in and www with a www to apex redirect.
+  DNS stays outside this stack (Cloudflare): point apex and www CNAMEs at the DistributionDomain output.
+
+Parameters:
+  FunctionName:
+    Type: String
+    Default: hc-site
+  CodeBucket:
+    Type: String
+  CodeKey:
+    Type: String
+    Default: hc-site/function.zip
+  CodeVersionId:
+    Type: String
+    Description: S3 object version of the zip (a revision is pinned to one version)
+  RoleArn:
+    Type: String
+    Description: WebRoleArn output of the base stack
+  SsmPrefix:
+    Type: String
+    Default: /hc-site
+  SiteDomain:
+    Type: String
+    Default: hcprajwal.in
+    Description: Used by the app for email sender addresses and as the apex domain when CertificateArn is set
+  ContactToEmail:
+    Type: String
+    Default: hello@hcprajwal.in
+  OpenRouterModel:
+    Type: String
+    Default: meta-llama/llama-3.1-8b-instruct:free
+  CertificateArn:
+    Type: String
+    Default: ""
+    Description: ACM certificate (us-east-1) covering the apex and www. Leave empty to use the CloudFront default domain only.
+  MaxEnvironments:
+    Type: Number
+    Default: 3
+    Description: Cost cap, maximum parallel execution environments
+  RateLimit:
+    Type: Number
+    Default: 100
+    AllowedValues: [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
+    Description: Endpoint-wide requests per second cap (cost guard). The API only accepts multiples of 100 up to 1000, then 1000s.
+
+Conditions:
+  HasCert: !Not [!Equals [!Ref CertificateArn, ""]]
+
+Resources:
+  # ---- Lambda Web Function ------------------------------------------------
+  WebFunction:
+    Type: AWS::Lambda::WebFunction
+    Properties:
+      FunctionName: !Ref FunctionName
+
+  WebFunctionRevision:
+    Type: AWS::Lambda::WebFunctionRevision
+    DependsOn: WebFunction
+    Properties:
+      FunctionName: !Ref FunctionName
+      BuildConfig:
+        CodeConfig:
+          S3Object:
+            Bucket: !Ref CodeBucket
+            Key: !Ref CodeKey
+            VersionId: !Ref CodeVersionId
+        RuntimeConfig:
+          Runtime: nodejs24.x
+      ServiceConfig:
+        ExecutionRoleArn: !Ref RoleArn
+        TimeoutSeconds: 60          # the chat aborts at 30 s, leave headroom
+        EnvironmentVariables:
+          NODE_ENV: production
+          DOMAIN: !Ref SiteDomain
+          CONTACT_TO_EMAIL: !Ref ContactToEmail
+          OPENROUTER_MODEL: !Ref OpenRouterModel
+          SSM_PREFIX: !Ref SsmPrefix
+
+  WebFunctionEndpoint:
+    Type: AWS::Lambda::WebFunctionEndpoint
+    DependsOn: [WebFunction, WebFunctionRevision]
+    Properties:
+      FunctionName: !Ref FunctionName
+      EndpointName: default
+      EndpointType: HomeRegion
+      AuthType: IamAuth             # only CloudFront (via OAC) can invoke it
+      RevisionWeights:
+        - RevisionId: !GetAtt WebFunctionRevision.RevisionId
+          Weight: 100
+      ScalingConfig:
+        MaxEnvironments: !Ref MaxEnvironments
+      ThrottleConfig:
+        RateLimit: !Ref RateLimit
+
+  # ---- CloudFront ----------------------------------------------------------
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${FunctionName}-oac"
+        OriginAccessControlOriginType: lambda
+        SigningBehavior: always-amz-auth
+        SigningProtocol: sigv4
+
+  ApiOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub "${FunctionName}-api-viewer-address"
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers: [CloudFront-Viewer-Address]
+        CookiesConfig:
+          CookieBehavior: none
+        QueryStringsConfig:
+          QueryStringBehavior: all
+
+  WwwRedirectFunction:
+    Type: AWS::CloudFront::Function
+    Condition: HasCert
+    Properties:
+      Name: !Sub "${FunctionName}-www-redirect"
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Redirect www to the apex domain
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var r = event.request;
+          var host = r.headers.host.value;
+          if (host.indexOf('www.') === 0) {
+            return {
+              statusCode: 301,
+              statusDescription: 'Moved Permanently',
+              headers: { location: { value: 'https://' + host.slice(4) + r.uri } }
+            };
+          }
+          return r;
+        }
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub "${FunctionName} site"
+        HttpVersion: http2
+        IPV6Enabled: true
+        PriceClass: PriceClass_All   # includes Asia edges for visitors in India
+        Aliases: !If [HasCert, [!Ref SiteDomain, !Sub "www.${SiteDomain}"], !Ref "AWS::NoValue"]
+        ViewerCertificate: !If
+          - HasCert
+          - AcmCertificateArn: !Ref CertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+        Origins:
+          - Id: web-function
+            DomainName: !GetAtt WebFunctionEndpoint.DomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              HTTPSPort: 443
+              OriginSSLProtocols: [TLSv1.2]
+              OriginReadTimeout: 60
+        DefaultCacheBehavior:
+          TargetOriginId: web-function
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6   # Managed-CachingOptimized
+          FunctionAssociations: !If
+            - HasCert
+            - - EventType: viewer-request
+                FunctionARN: !GetAtt WwwRedirectFunction.FunctionARN
+            - !Ref "AWS::NoValue"
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: web-function
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            Compress: false          # keep the SSE chat stream unbuffered
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad   # Managed-CachingDisabled
+            OriginRequestPolicyId: !Ref ApiOriginRequestPolicy
+
+  # Lets only this distribution invoke the IamAuth endpoint.
+  # aws:SourceArn is built with !Sub because Ref returns only the distribution id.
+  CloudFrontInvokePolicy:
+    Type: AWS::Lambda::ResourcePolicy
+    Properties:
+      ResourceArn: !GetAtt WebFunction.FunctionArn
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: lambda:InvokeWebFunctionEndpoint
+            Resource: !GetAtt WebFunctionEndpoint.EndpointArn
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+                aws:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+Outputs:
+  EndpointDomainName:
+    Value: !GetAtt WebFunctionEndpoint.DomainName
+  DistributionId:
+    Value: !Ref Distribution
+  DistributionDomain:
+    Value: !GetAtt Distribution.DomainName
+  SiteUrl:
+    Description: CloudFront URL (works before DNS is moved)
+    Value: !Sub "https://${Distribution.DomainName}"
