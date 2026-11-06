@@ -20,6 +20,7 @@ concurrency:
 env:
   AWS_REGION: us-east-1
   ACCOUNT_ID: "278371786585"
+  CERT_ARN: arn:aws:acm:us-east-1:278371786585:certificate/efdaf775-a5cf-46d9-8733-a941dbceeb93   # ACM cert for hcprajwal.in
 
 jobs:
   deploy:
@@ -38,17 +39,10 @@ jobs:
           role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/hc-site-github-deploy
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Find the certificate for hcprajwal.in
-        id: cert
-        run: |
-          ARN=$(aws acm list-certificates --region us-east-1 \
-            --query "CertificateSummaryList[?DomainName=='hcprajwal.in'&&Status=='ISSUED']|[0].CertificateArn" --output text)
-          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
-
       - name: Build and deploy
         env:
           CFN_ROLE_ARN: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/hc-site-cloudformation
-        run: scripts/deploy.sh app "${{ steps.cert.outputs.arn }}"
+        run: scripts/deploy.sh app "${{ env.CERT_ARN }}"
 
       - name: Check the live site
         run: |
