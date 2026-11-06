@@ -19,3 +19,11 @@ node_modules/
 # Runtime data — never commit
 data/
 backups/
+
+# Lambda packaging output
+.lambda/
+function.zip
+.dns-backup.json
+
+# Build output (rebuilt by scripts/package.sh)
+dist/

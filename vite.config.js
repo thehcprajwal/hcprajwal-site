@@ -16,6 +16,10 @@ export default defineConfig({
     },
     build: {
         outDir:     '../dist',
-        emptyOutDir: true
+        emptyOutDir: true,
+        rollupOptions: {
+            // three.js is large and rarely changes: its own file means visitors re-download it less often
+            output: { manualChunks: { three: ['three'] } }
+        }
     }
 });

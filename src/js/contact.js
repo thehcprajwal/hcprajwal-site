@@ -116,13 +116,6 @@ export function createContactForm({ print, pulse, onDone }) {
                 print(`\x1b[1;32m  ✓ ${json.message}\x1b[0m`);
                 pulse();
 
-                // Track submission — fire and forget
-                fetch('/api/track', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ event: 'contact_submit', reason: data.reason })
-                }).catch(() => {});
-
             } else {
                 print(`\x1b[31m  ✗ ${json.error || 'Something went wrong.'}\x1b[0m`);
                 if (res.status === 429) {
